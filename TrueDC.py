@@ -92,6 +92,7 @@ class App(QMainWindow):  # create the main window
         self.ui.open_serial.clicked.connect(self.OpenSerial)
         self.ui.close_serial.clicked.connect(self.CloseSerial)
         self.ui.power_butt.clicked.connect(self.main_loop)
+        self.ui.plot_reset.clicked.connect(self.plot_reset)
         self.ui.loop_period.valueChanged.connect(self.updateTimer)
         # ramp calculation events
         self.ui.P_setpoint.valueChanged.connect(self.calc_inc)
@@ -106,21 +107,21 @@ class App(QMainWindow):  # create the main window
         
         pen_uArc = pg.mkPen('b', width= 2)
         self.ui.arc_dU_graph.setBackground('w')
-        #self.ui.arc_dU_graph.setTitle('dU arcs rate', color='b')
-        self.ui.arc_dU_graph.setLabel('left'  , 'Counts/hod')
+        self.ui.arc_dU_graph.setTitle('Micro arcs rate', color='b')
+        self.ui.arc_dU_graph.setLabel('left'  , 'Counts/min')
         self.ui.arc_dU_graph.setLabel('bottom', 'Time [min]')
         self.arc_dU_plot = self.ui.arc_dU_graph.plot([], [], name='Micro arcs/hod', pen=pen_uArc)
         #self.ui.arc_dU_graph.addLegend()
         
-        pen_Im_Arc = pg.mkPen('r', width= 2)
-        pen_UxI_Arc = pg.mkPen('g', width= 2)
+        self.pen_Im_arc = pg.mkPen('r', width= 2)
+        self.pen_UxI_arc = pg.mkPen('g', width= 2)
         self.ui.arc_Im_UxI_graph.setBackground('w')
-        #self.ui.arc_Im_UxI_graph.setTitle('dU arcs rate', color='r')
-        self.ui.arc_Im_UxI_graph.setLabel('left'  , 'Counts/hod')
+        #self.ui.arc_Im_UxI_graph.setTitle('Arcs rate', color='r')
+        self.ui.arc_Im_UxI_graph.setLabel('left'  , 'Counts/min')
         self.ui.arc_Im_UxI_graph.setLabel('bottom', 'Time [min]')
-        self.arc_Im_UxI_plot = self.ui.arc_Im_UxI_graph.plot([], [], name='Im arcs/hod', pen=pen_Im_Arc)
-        #self.arc_Im_UxI_plot.plot([], [], name='UxI arcs/hod', pen=pen_UxI_Arc)
-        #self.ui.arc_Im_UxI_graph.addLegend()
+        self.ui.arc_Im_UxI_graph.addLegend((0,1))
+        self.arc_Im_plot = self.ui.arc_Im_UxI_graph.plot([], [], name='Im')
+        self.arc_UxI_plot = self.ui.arc_Im_UxI_graph.plot([], [], name='UxI')
 
 # %% ----------- system control functions ------------------------------
 
@@ -158,6 +159,7 @@ class App(QMainWindow):  # create the main window
                self.ui.ACK_byte_2.setValue(ord(resp[7]))
                if resp[6] == b'@' and resp[7] == b'\x00':
                    self.ui.ACK_value.setText('OK')
+                   print('RS232 OK')
                else:
                    self.ui.ACK_value.setText('Fault')
                     
@@ -171,16 +173,16 @@ class App(QMainWindow):  # create the main window
                
         if self.ui.plot_start.isChecked():
             if self.arc_interval_counter == int(self.arc_sample_interval*1000 / self.loop_period):
-                dU_rate = int(3600*(self.ui.arc_dU_count.value() - self.arc_dU_N_old) / self.arc_sample_interval)
-                Im_rate = int(3600*(self.ui.arc_Im_count.value() - self.arc_Im_N_old) / self.arc_sample_interval)
-                UxI_rate = int(3600*(self.ui.arc_UxI_count.value() - self.arc_UxI_N_old) / self.arc_sample_interval)
+                dU_rate = int(60*(self.ui.arc_dU_count.value() - self.arc_dU_N_old) / self.arc_sample_interval)
+                Im_rate = int(60*(self.ui.arc_Im_count.value() - self.arc_Im_N_old) / self.arc_sample_interval)
+                UxI_rate = int(60*(self.ui.arc_UxI_count.value() - self.arc_UxI_N_old) / self.arc_sample_interval)
                 self.time_point += self.arc_sample_interval/60
                 
                 self.arc_dU_rate.append(dU_rate)
-                self.arc_Im_rate.append(Im_rate + UxI_rate)
+                self.arc_Im_rate.append(Im_rate)
                 self.arc_UxI_rate.append(UxI_rate)
-                
                 self.time_line.append(self.time_point)
+                
                 self.arc_dU_N_old = self.ui.arc_dU_count.value()
                 self.arc_Im_N_old = self.ui.arc_Im_count.value()
                 self.arc_UxI_N_old = self.ui.arc_UxI_count.value()
@@ -188,7 +190,9 @@ class App(QMainWindow):  # create the main window
                 self.arc_interval_counter = 0
                 
                 self.arc_dU_plot.setData(self.time_line, self.arc_dU_rate)
-                self.arc_Im_UxI_plot.setData(self.time_line, self.arc_Im_rate)
+                self.arc_Im_plot.setData(self.time_line, self.arc_Im_rate, pen=self.pen_Im_arc)
+                self.arc_UxI_plot.setData(self.time_line, self.arc_UxI_rate, pen=self.pen_UxI_arc)
+                print('Time point = %f' %round(self.time_point, 2))
               
             self.arc_interval_counter +=1
             
@@ -246,6 +250,13 @@ class App(QMainWindow):  # create the main window
     def updateTimer(self):
         self.timer.setInterval(self.ui.loop_period.value())
         self.calc_inc()
+        
+    def plot_reset(self):
+        self.arc_dU_rate = [0]
+        self.arc_Im_rate = [0]
+        self.arc_UxI_rate = [0]
+        self.time_point = 0
+        self.time_line = [0]
         
     def set_sample_interval(self):
         self.arc_sample_interval = self.ui.sample_interval.value()
